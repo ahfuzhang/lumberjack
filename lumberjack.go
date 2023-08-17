@@ -3,7 +3,7 @@
 // Note that this is v2.0 of lumberjack, and should be imported using gopkg.in
 // thusly:
 //
-//   import "gopkg.in/natefinch/lumberjack.v2"
+//	import "gopkg.in/natefinch/lumberjack.v2"
 //
 // The package name remains simply lumberjack, and the code resides at
 // https://github.com/natefinch/lumberjack under the v2.0 branch.
@@ -22,6 +22,7 @@
 package lumberjack
 
 import (
+	"bufio"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -66,7 +67,7 @@ var _ io.WriteCloser = (*Logger)(nil)
 // `/var/log/foo/server.log`, a backup created at 6:30pm on Nov 11 2016 would
 // use the filename `/var/log/foo/server-2016-11-04T18-30-00.000.log`
 //
-// Cleaning Up Old Log Files
+// # Cleaning Up Old Log Files
 //
 // Whenever a new logfile gets created, old log files may be deleted.  The most
 // recent files according to the encoded timestamp will be retained, up to a
@@ -107,9 +108,14 @@ type Logger struct {
 	// using gzip. The default is not to perform compression.
 	Compress bool `json:"compress" yaml:"compress"`
 
-	size int64
-	file *os.File
-	mu   sync.Mutex
+	BufferIO bool `json:"bufio" yaml:"bufio"`
+
+	BufferBytes int `json:"buffer_bytes" yaml:"buffer_bytes"`
+
+	size   int64
+	osfile *os.File
+	file   io.Writer
+	mu     sync.Mutex
 
 	millCh    chan bool
 	startMill sync.Once
@@ -173,8 +179,13 @@ func (l *Logger) close() error {
 	if l.file == nil {
 		return nil
 	}
-	err := l.file.Close()
+	w, ok := l.file.(*bufio.Writer)
+	if ok {
+		w.Flush()
+	}
 	l.file = nil
+	err := l.osfile.Close()
+	l.osfile = nil
 	return err
 }
 
@@ -236,7 +247,12 @@ func (l *Logger) openNew() error {
 	if err != nil {
 		return fmt.Errorf("can't open new logfile: %s", err)
 	}
-	l.file = f
+	l.osfile = f
+	if l.BufferIO {
+		l.file = bufio.NewWriterSize(f, l.BufferBytes)
+	} else {
+		l.file = f
+	}
 	l.size = 0
 	return nil
 }
