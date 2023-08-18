@@ -108,8 +108,8 @@ type Logger struct {
 	// using gzip. The default is not to perform compression.
 	Compress bool `json:"compress" yaml:"compress"`
 
-	BufferIO bool `json:"bufio" yaml:"bufio"`
-
+	// BufferBytes bytes to define log buffer size
+	// when BufferBytes is 0, not use bufio to speed up log write
 	BufferBytes int `json:"buffer_bytes" yaml:"buffer_bytes"`
 
 	size   int64
@@ -248,7 +248,7 @@ func (l *Logger) openNew() error {
 		return fmt.Errorf("can't open new logfile: %s", err)
 	}
 	l.osfile = f
-	if l.BufferIO {
+	if l.BufferBytes > 0 {
 		l.file = bufio.NewWriterSize(f, l.BufferBytes)
 	} else {
 		l.file = f
